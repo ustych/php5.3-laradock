@@ -1,0 +1,135 @@
+FROM helder/php-5.3
+
+MAINTAINER https://github.com/UMmax
+
+#####################################
+# Common:
+#####################################
+RUN apt-get update \
+ && apt-get install --no-install-recommends -y \
+    libxml2-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libmcrypt-dev \
+    libpng12-dev \
+    libpq-dev \
+    libmagickwand-dev \
+    libmagickwand-6.q16-dev \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir /usr/include/freetype2/freetype \
+ && ln -s /usr/include/freetype2/freetype.h /usr/include/freetype2/freetype/freetype.h \
+ && docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
+ && docker-php-ext-install gd mbstring
+
+#####################################
+# GetText:
+#####################################
+RUN docker-php-ext-install gettext
+
+# COPY ./gettext.ini /usr/local/etc/php/conf.d/gettext.ini
+
+#####################################
+# ImageMagick:
+#####################################
+RUN pecl install imagick-3.3.0 && echo "extension=imagick.so" > /usr/local/etc/php/conf.d/imagick.ini
+
+#####################################
+# ZipArchive:
+#####################################
+
+ARG INSTALL_ZIP_ARCHIVE=true
+RUN if [ ${INSTALL_ZIP_ARCHIVE} = true ]; then \
+    # Install the zip extension
+    pecl install zip && \
+    docker-php-ext-enable zip \
+;fi
+
+#####################################
+# bcmath:
+#####################################
+
+ARG INSTALL_BCMATH=true
+RUN if [ ${INSTALL_BCMATH} = true ]; then \
+    # Install the bcmath extension
+    docker-php-ext-install bcmath \
+;fi
+
+#####################################
+# PHP Memcached:
+#####################################
+
+ARG INSTALL_MEMCACHED=false
+RUN if [ ${INSTALL_MEMCACHED} = true ]; then \
+    # Install the php memcached extension
+    apt-get update && apt-get install -y libmemcached-dev libmemcached11 --no-install-recommends && \
+    pecl install memcached-2.2.0 && \
+    echo "extension=memcached.so" > /usr/local/etc/php/conf.d/memcached.ini \
+;fi
+
+#####################################
+# PHP MySQL:
+#####################################
+
+ARG INSTALL_MYSQL=false
+COPY ./mysql.ini /usr/local/etc/php/conf.d/mysql.ini
+RUN if [ ${INSTALL_MYSQL} = true ]; then \
+    # Install the php mysql extension
+    docker-php-ext-install mysql && \
+    docker-php-ext-install mysqli && \
+    docker-php-ext-enable mysql && \
+    docker-php-ext-enable mysqli \
+;fi
+
+
+#####################################
+# Opcache:
+#####################################
+
+ARG INSTALL_OPCACHE=false
+RUN if [ ${INSTALL_OPCACHE} = true ]; then \
+    docker-php-ext-install opcache && \
+    docker-php-ext-enable opcache \
+;fi
+
+# Copy opcache configration
+COPY ./opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+
+#####################################
+# Mysqli Modifications:
+#####################################
+
+ARG INSTALL_MYSQLI=false
+RUN if [ ${INSTALL_MYSQLI} = true ]; then \
+     docker-php-ext-install mysqli \
+;fi
+
+#####################################
+# Tokenizer Modifications:
+#####################################
+
+ARG INSTALL_TOKENIZER=false
+RUN if [ ${INSTALL_TOKENIZER} = true ]; then \
+     docker-php-ext-install tokenizer \
+;fi
+
+#
+#--------------------------------------------------------------------------
+# Final Touch
+#--------------------------------------------------------------------------
+#
+
+ADD ./laravel.ini /usr/local/etc/php/conf.d
+ADD ./laravel.pool.conf /usr/local/etc/php-fpm.d/
+
+#RUN rm -r /var/lib/apt/lists/*
+
+
+RUN usermod -u 1000 www-data
+RUN sed -i -e "" /usr/local/etc/php-fpm.d/www.conf
+
+WORKDIR /var/www
+
+CMD ["php-fpm"]
+
+EXPOSE 9000
